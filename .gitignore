@@ -1,0 +1,25 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Dataset archives and extracted data should not be committed here.
+imed_first_release/
+*.zip
+*.tar
+*.tar.*
+*.mp4
+*.npy
+*.npz
+foundation_stereo_depths/
+
+# Local outputs
+outputs/
+*.log
