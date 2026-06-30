@@ -4,7 +4,7 @@ iMED v1.0 is the first iMED sample release. It is not the full iMED dataset. The
 
 Version 1 contains one scene per session, so users can inspect the structure of iMED (\~6 GB). The full dataset contains contains \~7 scenes per session (\~45 GB). 
 
-The dataset can be found at: https://figshare.com/s/fb777151d77ece687ba0
+The dataset can be found at: https://doi.org/10.5522/04/32764638
 
 Challenge pages:
 
