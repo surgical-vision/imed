@@ -1,6 +1,6 @@
 # iMED v1.0 Scripts
 
-iMED v1.0 is the first iMED sample release. It is not the full iMED dataset. The full dataset is deferred while the MICCAI challenge is active to reduce data leakage. Challenge solutions are due by Sept. 1, with the planned full iMED release targeted for the ECCV conference date, Sept. 8. 
+iMED v1.0 is the first iMED sample release. It is not the full iMED dataset. The full dataset is deferred while the MICCAI challenge is active to reduce data leakage. Challenge solutions are due by Sept. 1, with the planned full iMED release targeted for Oct. 15. 
 
 Version 1 contains one scene per session, so users can inspect the structure of iMED (\~6 GB). The full dataset contains contains \~7 scenes per session (\~45 GB). 
 
