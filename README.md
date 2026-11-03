@@ -1,34 +1,39 @@
-# iMED v1.0 Scripts
+# iMED Scripts
 
-iMED v1.0 is the first iMED sample release. It is not the full iMED dataset. The full dataset is deferred while the MICCAI challenge is active to reduce data leakage. Challenge solutions are due by Sept. 1, with the planned full iMED release targeted for Oct. 15. 
+This repository contains the scripts supporting the iMED paper: the dataset
+loader, examples, validation tools, pose-estimation and novel-view-synthesis
+converters, and optional stereo depth generation.
 
-Version 1 contains one scene per session, so users can inspect the structure of iMED (\~6 GB). The full dataset contains contains \~7 scenes per session (\~45 GB). 
+Following the completion of the iMED challenge, **iMED v2.0** is the full dataset
+release, containing 341 sequences across 43 scenes and seven sessions (~48 GB).
+The earlier v1.0 sample release contains one scene per session (~6 GB).
 
-The dataset can be found at: https://doi.org/10.5522/04/32764638
+**Dataset:** [Download iMED](https://doi.org/10.5522/04/32764638)
 
-Challenge pages:
+**Challenge pages:**
 
-- https://imed-challenge.github.io/
-- https://www.synapse.org/Synapse:syn74277461/wiki/639538
+- [iMED Challenge](https://imed-challenge.github.io/)
+- [Synapse challenge page](https://www.synapse.org/Synapse:syn74277461/wiki/639538)
 
-This repository contains the scripts for iMED v1.0: the loader, examples, validation script, loader test, and optional depth-generation helper.
-
-After downloading and extracting the dataset archive, examples below assume this layout:
+The loader supports both v1 and v2. After downloading and extracting the dataset
+archive, the examples below assume this layout:
 
 ```text
-imed_v1_0/
+imed_v2_0/
 imed_scripts/
 ```
 
+Use `IMEDDataset("../imed_v2_0")` for v2 or `IMEDDataset("../imed_v1_0")` for v1.
+
 ## Release Layout
 
-iMED v1.0:
+iMED v2.0:
 
-- `imed_v1_0/`: data and primary loader target. Each released sequence contains processed videos when applicable, raw videos for reprocessing, timestamps, calibration/intrinsics, tool masks where present, metadata, and reference trajectories.
+- `imed_v2_0/`: data and primary loader target. Each released sequence contains processed videos when applicable, raw videos for reprocessing, timestamps, calibration/intrinsics, tool masks where present, metadata, and reference trajectories.
 
 Sequence directories use these names:
 
-- `endoscope1.mp4`, `endoscope2.mp4`: processed endoscopic videos. For sequences with ArUcos present, these are photometrically matched and inpainted outputs.
+- `endoscope1.mp4`, `endoscope2.mp4`: processed endoscopic videos. For sequences with ArUcos present, these are the current marker-inpainted outputs.
 - `endoscope1_raw.mp4`, `endoscope2_raw.mp4`: unprocessed/raw videos for users who want to inspect or recompute processing.
 - `endoscope1_tools.mp4`, `endoscope2_tools.mp4`: tool masks when tools are present.
 - `*_filenames.csv`: timestamp table.
@@ -36,21 +41,19 @@ Sequence directories use these names:
 
 The release provides processed and raw videos, plus ArUco dictionary metadata.
 
-## Included Signals
-
-The subset includes:  
+The release includes:
 
 - processed stereo videos
 - raw stereo videos in the same sequence directories
 - timestamp CSV files
 - per-session intrinsics and calibration files
-- approved calibration sequences needed for recomputation workflows
+- calibration sequences
 - dataset, session, scene, and sequence metadata
-- instrument masks where tools are present
-- reference trajectories where available
+- instrument masks when tools are present
+- reference trajectories
 - dataloader, examples, validation script, and loader test
 
-Stereo depth maps are omitted for size reasons. They are intended to be recomputable from the released data and code.
+Stereo depth maps can be generated with the included FoundationStereo helper.
 
 ## Video Layout
 
@@ -59,7 +62,13 @@ Each `endoscope1.mp4` and `endoscope2.mp4` file is a stacked stereo video for on
 - The top half of each frame is the left cam.
 - The bottom half of each frame is the right cam.
 
+Frame indices are zero-based video positions. Both eyes are split from the same
+decoded frame: endoscope1 supplies L/R and endoscope2 supplies SL/SR. Capture
+timestamps are provided for each endoscope.
+
 ## Install
+
+Requires Python 3.11 or newer.
 
 ```bash
 cd imed_scripts
@@ -69,7 +78,7 @@ pip install -r requirements.txt
 Validate an extracted dataset:
 
 ```bash
-python scripts/validate_dataset.py ../imed_v1_0
+python scripts/validate_dataset.py ../imed_v2_0
 ```
 
 ## Expected Layout
@@ -86,8 +95,13 @@ imed_scripts/
     load_trajectory.py
     prepare_foundation_stereo_inputs.py
   scripts/
+    convert_to_imed_pe.py
+    convert_to_imed_nvs.py
+    convert_task.py
     run_foundation_stereo_depths.py
     test_loader.py
+    test_pose_api.py
+    test_video_indexing.py
     validate_dataset.py
 ```
 
@@ -122,8 +136,17 @@ The loader exposes:
 Run the full loader test:
 
 ```bash
-python scripts/test_loader.py ../imed_v1_0
+python scripts/test_loader.py ../imed_v2_0
 ```
+
+Run the pixel-level indexing regression without downloading the dataset:
+
+```bash
+python scripts/test_video_indexing.py
+```
+
+It checks all four eyes in raw and processed videos against independent
+sequential decoding, including repeated/backward access and invalid indices.
 
 Each `IMEDSequence` exposes:
 
@@ -138,7 +161,8 @@ Each `IMEDSequence` exposes:
 - `sequence.aruco_tag_dictionary`: optional ArUco dictionary metadata used for pose generation
 - `sequence.processed_video_path(camera)`, `sequence.raw_video_path(camera)`, and `sequence.tool_mask_path(camera)`
 
-Moving-ArUco calibration sequences may be present when another included sequence points to them through pose-source metadata. They are calibration/raw sequences and are not expected to contain processed DiffuEraser videos.
+Moving-ArUco calibration sequences provide raw videos and are linked through
+pose-source metadata.
 
 ## Metadata Filtering
 
@@ -147,7 +171,7 @@ The loader supports the task-specific filtering shown in the paper:
 ```python
 from imed_dataset_loader import IMEDDataset
 
-dataset = IMEDDataset("../imed_v1_0")
+dataset = IMEDDataset("../imed_v2_0")
 
 camera_motion = [
     "circular_camera_motion",
@@ -179,7 +203,7 @@ tool_energy = dataset.filter(
 
 ## Stereo Depths
 
-Stereo depth maps must be recomputed:
+Prepare stereo depth inputs:
 
 ```python
 inputs = dataset.get_foundation_stereo_inputs(
@@ -193,7 +217,7 @@ Run one frame:
 
 ```bash
 python scripts/run_foundation_stereo_depths.py \
-  /path/to/imed_v1_0 \
+  /path/to/imed_v2_0 \
   --sequence-id session_001/chickenbreast_10deg/circular \
   --foundation-stereo-dir /path/to/FoundationStereo \
   --frame-idx 0 \
@@ -206,7 +230,7 @@ Run a full sequence and save depth videos inside the sequence directory:
 
 ```bash
 python scripts/run_foundation_stereo_depths.py \
-  /path/to/imed_v1_0 \
+  /path/to/imed_v2_0 \
   --sequence-id session_001/chickenbreast_10deg/circular \
   --foundation-stereo-dir /path/to/FoundationStereo \
   --camera both \
@@ -224,4 +248,62 @@ FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth
 FoundationStereo/pretrained_models/23-51-11/cfg.yaml
 ```
 
-Install FoundationStereo's optional dependencies, including a CUDA-compatible PyTorch build and `omegaconf`, in the environment used to run the depth script. These dependencies are not part of the default loader requirements since they are GPU specific (best if  you can figure this out for your individual gpu).
+For depth generation, install FoundationStereo's dependencies, including a
+CUDA-compatible PyTorch build and `omegaconf`.
+
+
+## Poses
+
+`trajectory_poses.txt` is a whitespace-separated table with a header:
+
+```text
+frame_idx T00 T01 T02 T03 T10 T11 T12 T13 T20 T21 T22 T23 T30 T31 T32 T33 trans_uncertainty_m rot_uncertainty_deg combined_uncertainty
+```
+
+`T00`–`T33` form a row-major 4×4 transform. In v2, this is `T_SL_from_L`,
+mapping endoscope1 left coordinates to endoscope2 left coordinates:
+`X_SL = R @ X_L + t`, with translation in **metres**. `frame_idx` is the
+zero-based endoscope1 video/CSV row. Dynamic trajectories contain one transform
+per labelled frame; static trajectories contain one transform with a
+`valid_frame_range` recorded in `relative_poses.json`.
+
+Use `dataset.load_trajectory(sequence_id)` to read trajectories in either
+version. V2 also supports frame-specific pose queries:
+
+```python
+dataset.get_pose("session_007/scene_9/circular", 561)
+dataset.get_poses("session_007/scene_9/circular", [0, 561])
+dataset.get_image_calibration("session_007")
+```
+
+`get_pose` and `get_poses` check for coverage and validity. `get_calibration` retains
+the original lens coefficients; `get_image_calibration` returns zero distortion
+for v2's already-undistorted pixels.
+
+Uncertainty columns describe independent channel disagreement using a nominal
+parallel stereo baseline.
+
+## Task conversion
+
+The converters read the public v2 release.
+Use `--dry-run` to list eligible recordings before extraction:
+
+```sh
+python imed_scripts/scripts/convert_to_imed_pe.py imed_v2_0 iMED_pe_v2 --dry-run
+python imed_scripts/scripts/convert_to_imed_pe.py imed_v2_0 iMED_pe_v2 --sequence-id session_007/scene_9/circular --split train
+python imed_scripts/scripts/convert_to_imed_nvs.py imed_v2_0 iMED_NVS_v2 --sequence-id session_007/scene_9/tool_1
+```
+
+Both formats have `session_NNN_scene_sequence/`, `K.txt`, `pose.txt`, and
+`endoscope{1,2}/{L,R}/frame_NNNNNN.png`. Images are 1280×1024, with matching
+intrinsics in `K.txt`. Task pose translations are in **millimetres**, quaternions in
+**xyzw** order. PE uses the normalization
+`inverse(T_first_exported) @ T_frame`, with source video indices in column 0.
+NVS uses two pose rows: row 0 is endoscope2 left at identity; row 1 is
+endoscope1 left in the endoscope2-left coordinate system.
+
+NVS exports masks into `toolL/` and `toolR/`. To generate depth in millimetres,
+add `--foundation-stereo-dir /path/to/FoundationStereo --device cuda:0`.
+
+To verify the downloaded dataset against its manifest, run
+`python imed_scripts/scripts/validate_dataset.py imed_v2_0 --verify-checksums`.
