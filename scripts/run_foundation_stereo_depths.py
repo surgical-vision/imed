@@ -354,8 +354,11 @@ def run_foundation_stereo_inference(model, input_padder_cls, left_img, right_img
     valid = disp_full_scale > 0
     depth[valid] = (float(k_left[0, 0]) * baseline_m) / disp_full_scale[valid]
     depth[~valid] = 0
-    depth = np.clip(depth, 0.002, 0.2)
-    return cv2.resize(depth, (left_img.shape[1], left_img.shape[0]), interpolation=cv2.INTER_LINEAR)
+    depth[valid] = np.clip(depth[valid], 0.002, 0.2)
+    size = (left_img.shape[1], left_img.shape[0])
+    depth = cv2.resize(depth, size, interpolation=cv2.INTER_LINEAR)
+    depth[cv2.resize(valid.astype(np.uint8), size, interpolation=cv2.INTER_NEAREST) == 0] = 0
+    return depth
 
 
 def colorize_depth(depth: np.ndarray, min_depth: float = 0.002, max_depth: float = 0.2) -> np.ndarray:

@@ -32,8 +32,9 @@ def main() -> int:
     dataset = IMEDDataset(args.root)
 
     require(len(dataset.sessions) == 7, "expected 7 released sessions")
-    require(len(dataset.scenes) == 7, "expected 7 released scenes")
-    require(len(dataset.sequences) == 51, "expected 51 released sequences")
+    metadata = dataset.get_dataset_metadata()
+    require(len(dataset.scenes) == len(metadata['selected_scenes']), "released scene count mismatch")
+    require(len(dataset.sequences) == metadata.get('sequence_count', 51), "released sequence count mismatch")
     require(dataset.get_scope_baseline("mm") == 4.1, "scope baseline mismatch")
     require(abs(dataset.get_scope_baseline("m") - 0.0041) < 1e-12, "scope baseline mismatch")
 

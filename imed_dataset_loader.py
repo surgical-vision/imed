@@ -1,4 +1,4 @@
-"""Minimal public loader for the iMED first public subset."""
+"""Public loader for iMED v1 and v2 releases."""
 
 from __future__ import annotations
 
@@ -282,6 +282,13 @@ class IMEDDataset:
         """Return common paper-task subsets using released metadata filters."""
         camera_motion = ["circular_camera_motion", "zoom_camera_motion", "lateral_camera_motion"]
         task = task.lower().replace("-", "_").replace(" ", "_")
+        if task == "pe":
+            return self.filter(session_types=session_types, movement_types=camera_motion,
+                               has_trajectory=True, has_processed_videos=True)
+        if task == "nvs":
+            return self.filter(session_types=session_types,
+                movement_types=["off_camera_manipulation", "tool_manipulation"],
+                has_trajectory=True, has_processed_videos=True)
         if task in {"rigid_nvs", "temporal_stereo_pose", "temporal_stereo_pose_estimation"}:
             return self.filter(session_types=session_types, movement_types=camera_motion, has_trajectory=True)
         if task in {"deformable_nvs", "online_deformable_nvs"}:
@@ -383,6 +390,13 @@ class IMEDDataset:
         intrinsics = self.get_intrinsics(session_id)
         return {name: (record["K"], record["D"]) for name, record in intrinsics.items()}
 
+    def get_image_calibration(self, session_id: str) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+        """Calibration for released pixels; v2 videos are already undistorted."""
+        calibration = self.get_calibration(session_id)
+        if self.dataset_metadata.get('pixels_undistorted') is True:
+            return {name: (k, np.zeros_like(d)) for name, (k, d) in calibration.items()}
+        return calibration
+
     def get_stereo_intrinsics(self, session_id: str, camera: str = "endoscope1") -> dict[str, dict[str, np.ndarray]]:
         """Return calibration records for the two views inside one stacked endoscope video."""
         left_key, right_key = _camera_pair(camera)
@@ -418,7 +432,7 @@ class IMEDDataset:
         sequence = self.get_sequence(sequence_id)
         left, right = self.get_stereo_pair(sequence_id, frame_idx, camera=camera, raw=raw)
         left_key, right_key = _camera_pair(camera)
-        calibration = self.get_calibration(sequence.session_id)
+        calibration = self.get_image_calibration(sequence.session_id)
         return {
             "left": left,
             "right": right,
@@ -447,10 +461,54 @@ class IMEDDataset:
         traj_path = _resolve_sequence_file(sequence.path, trajectory_name)
         if not traj_path.is_file():
             raise FileNotFoundError(f"Trajectory file not found: {traj_path}")
-        data = np.genfromtxt(traj_path, names=True, dtype=float)
+        data = np.atleast_1d(np.genfromtxt(traj_path, names=True, dtype=float))
         if data.size == 0:
             raise ValueError(f"Trajectory file has no pose rows: {traj_path}")
+        required = ["frame_idx"] + [f"T{i}{j}" for i in range(4) for j in range(4)]
+        if not set(required).issubset(data.dtype.names or ()):
+            raise ValueError(f"Missing trajectory columns: {traj_path}")
+        values = np.column_stack([data[name] for name in data.dtype.names])
+        if not np.isfinite(values).all():
+            raise ValueError(f"Nonfinite trajectory values: {traj_path}")
+        ids = data["frame_idx"]
+        if np.any(ids < 0) or np.any(ids != ids.astype(int)) or np.any(np.diff(ids) <= 0):
+            raise ValueError(f"Invalid trajectory frame indices: {traj_path}")
+        matrices = np.column_stack([data[k] for k in required[1:]]).reshape(-1, 4, 4)
+        r = matrices[:, :3, :3]
+        if (not np.allclose(matrices[:, 3], [0, 0, 0, 1], atol=1e-7)
+                or not np.allclose(r.transpose(0, 2, 1) @ r, np.eye(3), atol=1e-6)
+                or not np.allclose(np.linalg.det(r), 1, atol=1e-6)):
+            raise ValueError(f"Invalid rigid transforms: {traj_path}")
         return {"metadata": metadata, "trajectory": data, "path": traj_path}
+
+    def get_pose(self, sequence_id: str, frame_idx: int) -> np.ndarray:
+        """Return T_SL_from_L in metres at a zero-based video row."""
+        return self.get_poses(sequence_id, [frame_idx])[0]
+
+    def get_poses(self, sequence_id: str, frame_indices) -> np.ndarray:
+        """Load poses once and enforce frame coverage, including static intervals."""
+        indices = np.asarray(frame_indices)
+        if indices.ndim != 1 or not np.issubdtype(indices.dtype, np.integer) or np.any(indices < 0):
+            raise ValueError("frame_indices must be a vector of nonnegative integers")
+        sequence = self.get_sequence(sequence_id)
+        count = sequence.metadata.get("frame_count")
+        if count is not None and np.any(indices >= count):
+            raise IndexError(f"Frame outside {sequence_id}")
+        record = self.load_trajectory(sequence_id)
+        metadata, data = record["metadata"], record["trajectory"]
+        interval = metadata.get("valid_frame_range")
+        if interval is not None and np.any((indices < interval[0]) | (indices > interval[1])):
+            raise ValueError(f"Pose unavailable outside valid range {interval}")
+        if metadata.get("pose_type") == "static":
+            if len(data) != 1:
+                raise ValueError("Static pose must contain one transform")
+            rows = np.repeat(data, len(indices))
+        else:
+            positions = np.searchsorted(data["frame_idx"], indices)
+            if np.any(positions >= len(data)) or np.any(data["frame_idx"][positions] != indices):
+                raise ValueError(f"Requested pose rows unavailable in {sequence_id}")
+            rows = data[positions]
+        return np.column_stack([rows[f"T{i}{j}"] for i in range(4) for j in range(4)]).reshape(-1, 4, 4)
 
 
 def _lookup_path(paths: dict[str, Path], key: str, expected_name: str, sequence_id: str) -> Path:
