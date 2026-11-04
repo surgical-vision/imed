@@ -1,5 +1,17 @@
 # iMED Scripts
 
+<p align="center">
+  <a href="https://arxiv.org/abs/2611.04755">📄 Paper</a>
+  &nbsp;·&nbsp;
+  <a href="https://doi.org/10.5522/04/32764638">📦 Dataset</a>
+  &nbsp;·&nbsp;
+  <a href="https://huggingface.co/datasets/sbonilla/imed">🤗 Hugging Face</a>
+  &nbsp;·&nbsp;
+  <a href="https://imed-challenge.github.io/">🏆 iMED Challenge</a>
+  &nbsp;·&nbsp;
+  <a href="https://www.synapse.org/Synapse:syn74277461/wiki/639538">🏆 Synapse Challenge</a>
+</p>
+
 This repository contains the scripts supporting the iMED paper: the dataset
 loader, examples, validation tools, pose-estimation and novel-view-synthesis
 converters, and optional stereo depth generation.
@@ -7,13 +19,6 @@ converters, and optional stereo depth generation.
 Following the completion of the iMED challenge, **iMED v2.0** is the full dataset
 release, containing 341 sequences across 43 scenes and seven sessions (~48 GB).
 The earlier v1.0 sample release contains one scene per session (~6 GB).
-
-**Dataset:** [Download iMED](https://doi.org/10.5522/04/32764638)
-
-**Challenge pages:**
-
-- [iMED Challenge](https://imed-challenge.github.io/)
-- [Synapse challenge page](https://www.synapse.org/Synapse:syn74277461/wiki/639538)
 
 The loader supports both v1 and v2. After downloading and extracting the dataset
 archive, the examples below assume this layout:
